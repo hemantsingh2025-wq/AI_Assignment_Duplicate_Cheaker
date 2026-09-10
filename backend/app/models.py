@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, Float
+from sqlalchemy import Column, Integer, String, Boolean, Float, ForeignKey
 from .database import Base
 
 
@@ -54,6 +54,10 @@ class SignupVerification(Base):
 
     password_hash = Column(String, nullable=False)
 
+    role = Column(String, default="student", nullable=False)
+
+    subject = Column(String, nullable=True)
+
     organization = Column(String, nullable=False)
 
     otp_hash = Column(String, nullable=False)
@@ -63,6 +67,28 @@ class SignupVerification(Base):
     expires_at = Column(String, nullable=False)
 
     created_at = Column(String, nullable=False)
+
+
+class Classroom(Base):
+    __tablename__ = "classrooms"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    subject = Column(String, nullable=False)
+    teacher_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    organization = Column(String, nullable=True)
+    join_code = Column(String, unique=True, index=True, nullable=False)
+    created_at = Column(String, nullable=False)
+
+
+class ClassroomMembership(Base):
+    __tablename__ = "classroom_memberships"
+
+    id = Column(Integer, primary_key=True, index=True)
+    classroom_id = Column(Integer, ForeignKey("classrooms.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    role = Column(String, default="student", nullable=False)
+    joined_at = Column(String, nullable=False)
 
 
 class Assignment(Base):
@@ -98,6 +124,16 @@ class Assignment(Base):
     uploaded_by = Column(
         Integer,
         nullable=False
+    )
+
+    classroom_id = Column(
+        Integer,
+        nullable=True
+    )
+
+    teacher_id = Column(
+        Integer,
+        nullable=True
     )
 
     is_duplicate = Column(

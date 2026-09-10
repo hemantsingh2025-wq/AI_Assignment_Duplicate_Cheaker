@@ -1,7 +1,6 @@
 # =========================================================
 # AI ASSIGNMENT DUPLICATE CHECKER - MAIN.PY
 # =========================================================
-
 import os
 import secrets
 import smtplib
@@ -39,7 +38,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from jose import jwt, JWTError
 
 from app.database import Base, engine, SessionLocal
-from app.models import Assignment, SignupVerification, User
+from app.models import Assignment, Classroom, ClassroomMembership, SignupVerification, User
 from app.auth import hash_password, verify_password
 
 
@@ -196,9 +195,17 @@ def is_college_email(email: str) -> bool:
         "ac.",
         "university",
         "campus",
+        ".edu.",
+        ".edu",
     )
 
-    return any(marker in domain for marker in allowed_markers)
+    if any(marker in domain for marker in allowed_markers):
+        return True
+
+    if domain.count(".") >= 2 and not domain.startswith("mail"):
+        return True
+
+    return False
 
 
 # =========================================================
@@ -231,12 +238,34 @@ class SignupRequest(BaseModel):
 
     password: str
 
+    role: str | None = "student"
+
+    subject: str | None = None
+
 
 class VerifySignupRequest(BaseModel):
 
     email: EmailStr
 
     otp: str
+
+
+class CreateClassroomRequest(BaseModel):
+
+    name: str
+    subject: str
+    join_code: str | None = None
+
+
+class JoinClassroomRequest(BaseModel):
+
+    join_code: str
+
+
+class TeacherAssignStudentRequest(BaseModel):
+
+    student_email: EmailStr
+    classroom_id: int
 
 
 # =========================================================
@@ -506,6 +535,8 @@ def signup(
     name = signup_data.name.strip()
     email = str(signup_data.email).strip().lower()
     password = signup_data.password
+    requested_role = (signup_data.role or "student").strip().lower()
+    subject = (signup_data.subject or "").strip()
 
     if len(name) < 2:
         raise HTTPException(status_code=400, detail="Name is required")
@@ -513,11 +544,20 @@ def signup(
     if len(password.encode("utf-8")) > 72 or len(password) < 6:
         raise HTTPException(status_code=400, detail="Password must be 6 to 72 characters")
 
+    if requested_role not in {"student", "teacher"}:
+        raise HTTPException(status_code=400, detail="Role must be either student or teacher")
+
     if not is_college_email(email):
         raise HTTPException(
             status_code=400,
             detail="Signup requires a valid college or university email address",
         )
+
+    if requested_role == "teacher" and not subject:
+        raise HTTPException(status_code=400, detail="Teacher signup requires a subject")
+
+    if requested_role == "teacher" and subject not in SUBJECTS:
+        raise HTTPException(status_code=400, detail="Invalid teacher subject selected")
 
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(status_code=400, detail="User with this email already exists")
@@ -530,6 +570,8 @@ def signup(
     if pending:
         pending.name = name
         pending.password_hash = hash_password(password)
+        pending.role = requested_role
+        pending.subject = subject or None
         pending.organization = get_organization_from_email(email)
         pending.otp_hash = hash_password(otp)
         pending.attempt_count = 0
@@ -540,6 +582,8 @@ def signup(
             name=name,
             email=email,
             password_hash=hash_password(password),
+            role=requested_role,
+            subject=subject or None,
             organization=get_organization_from_email(email),
             otp_hash=hash_password(otp),
             attempt_count=0,
@@ -557,6 +601,7 @@ def signup(
     response = {
         "message": "Verification OTP sent to your college email",
         "email": email,
+        "role": requested_role,
         "expires_in_minutes": OTP_EXPIRY_MINUTES,
     }
     if not email_sent and os.getenv("ALLOW_DEV_OTP", "false").lower() == "true":
@@ -610,7 +655,8 @@ def verify_signup(
         name=pending.name,
         email=pending.email,
         password_hash=pending.password_hash,
-        role="student",
+        role=pending.role or "student",
+        subject=pending.subject,
         organization=pending.organization,
         is_active=True,
     )
@@ -726,6 +772,7 @@ def extract_assignment_text(
 async def upload_assignments(
     files: list[UploadFile] = File(...),
     subject: str = Form(...),
+    classroom_id: int | None = Form(default=None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -749,7 +796,23 @@ async def upload_assignments(
             detail="Subject is required"
         )
 
+    classroom = None
+    if classroom_id is not None:
+        classroom = db.query(Classroom).filter(Classroom.id == classroom_id).first()
+        if not classroom:
+            raise HTTPException(status_code=404, detail="Classroom not found")
+
     if current_user.role == "student":
+        if classroom_id is None:
+            raise HTTPException(status_code=400, detail="Students must submit inside a classroom")
+        membership = db.query(ClassroomMembership).filter(
+            ClassroomMembership.classroom_id == classroom_id,
+            ClassroomMembership.user_id == current_user.id,
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="You are not enrolled in this classroom")
+        if subject_name.lower() != classroom.subject.lower():
+            raise HTTPException(status_code=403, detail="Student subject must match classroom subject")
         if current_user.subject and current_user.subject.lower() != subject_name.lower():
             raise HTTPException(
                 status_code=403,
@@ -758,6 +821,11 @@ async def upload_assignments(
         if not current_user.subject:
             current_user.subject = subject_name
             db.commit()
+        teacher_id = classroom.teacher_id
+    else:
+        if classroom_id is not None and classroom and classroom.teacher_id != current_user.id:
+            raise HTTPException(status_code=403, detail="You can only manage your own classroom")
+        teacher_id = current_user.id if current_user.role in {"teacher", "super_admin"} else None
 
     if current_user.role in {"teacher", "super_admin"}:
         if subject_name not in SUBJECTS:
@@ -796,6 +864,8 @@ async def upload_assignments(
                 extracted_text=text,
                 subject=subject_name,
                 uploaded_by=current_user.id,
+                classroom_id=classroom_id,
+                teacher_id=teacher_id,
                 is_duplicate=False,
                 review_status="pending",
                 teacher_decision=None,
@@ -1141,6 +1211,10 @@ def get_users(
 def ensure_database_schema(db: Session):
     user_columns = [row[1] for row in db.execute(text("PRAGMA table_info(users)")).fetchall()]
     assignment_columns = [row[1] for row in db.execute(text("PRAGMA table_info(assignments)")).fetchall()]
+    verification_columns = [
+        row[1]
+        for row in db.execute(text("PRAGMA table_info(signup_verifications)")).fetchall()
+    ]
 
     if "subject" not in user_columns:
         db.execute(text("ALTER TABLE users ADD COLUMN subject VARCHAR"))
@@ -1148,10 +1222,11 @@ def ensure_database_schema(db: Session):
     if "organization" not in user_columns:
         db.execute(text("ALTER TABLE users ADD COLUMN organization VARCHAR"))
 
-    verification_columns = [
-        row[1]
-        for row in db.execute(text("PRAGMA table_info(signup_verifications)")).fetchall()
-    ]
+    if "role" not in [row[1] for row in db.execute(text("PRAGMA table_info(signup_verifications)")).fetchall()]:
+        db.execute(text("ALTER TABLE signup_verifications ADD COLUMN role VARCHAR DEFAULT 'student'"))
+
+    if "subject" not in [row[1] for row in db.execute(text("PRAGMA table_info(signup_verifications)")).fetchall()]:
+        db.execute(text("ALTER TABLE signup_verifications ADD COLUMN subject VARCHAR"))
 
     if "attempt_count" not in verification_columns:
         db.execute(text("ALTER TABLE signup_verifications ADD COLUMN attempt_count INTEGER DEFAULT 0"))
@@ -1165,7 +1240,187 @@ def ensure_database_schema(db: Session):
     if "subject" not in assignment_columns:
         db.execute(text("ALTER TABLE assignments ADD COLUMN subject VARCHAR DEFAULT 'General'"))
 
+    if "classroom_id" not in assignment_columns:
+        db.execute(text("ALTER TABLE assignments ADD COLUMN classroom_id INTEGER"))
+
+    if "teacher_id" not in assignment_columns:
+        db.execute(text("ALTER TABLE assignments ADD COLUMN teacher_id INTEGER"))
+
+    classroom_columns = [row[1] for row in db.execute(text("PRAGMA table_info(classrooms)")).fetchall()]
+    if not classroom_columns:
+        db.execute(text("CREATE TABLE IF NOT EXISTS classrooms (id INTEGER PRIMARY KEY AUTOINCREMENT, name VARCHAR NOT NULL, subject VARCHAR NOT NULL, teacher_id INTEGER NOT NULL, organization VARCHAR, join_code VARCHAR UNIQUE, created_at VARCHAR NOT NULL)"))
+
+    membership_columns = [row[1] for row in db.execute(text("PRAGMA table_info(classroom_memberships)")).fetchall()]
+    if not membership_columns:
+        db.execute(text("CREATE TABLE IF NOT EXISTS classroom_memberships (id INTEGER PRIMARY KEY AUTOINCREMENT, classroom_id INTEGER NOT NULL, user_id INTEGER NOT NULL, role VARCHAR DEFAULT 'student', joined_at VARCHAR NOT NULL)"))
+
     db.commit()
+
+
+@app.post("/classrooms")
+def create_classroom(
+    payload: CreateClassroomRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in {"teacher", "super_admin"}:
+        raise HTTPException(status_code=403, detail="Only teachers can create classrooms")
+
+    name = payload.name.strip()
+    subject = payload.subject.strip()
+    if not name or not subject:
+        raise HTTPException(status_code=400, detail="Classroom name and subject are required")
+    if subject not in SUBJECTS:
+        raise HTTPException(status_code=400, detail="Invalid subject selected")
+
+    join_code = (payload.join_code or "").strip().upper()
+    if not join_code:
+        join_code = "CLS" + secrets.token_urlsafe(5).upper().replace("-", "")[:8]
+
+    classroom = Classroom(
+        name=name,
+        subject=subject,
+        teacher_id=current_user.id,
+        organization=current_user.organization,
+        join_code=join_code,
+        created_at=datetime.utcnow().isoformat(),
+    )
+    db.add(classroom)
+    db.commit()
+    db.refresh(classroom)
+
+    return {
+        "message": "Classroom created successfully",
+        "classroom": {
+            "id": classroom.id,
+            "name": classroom.name,
+            "subject": classroom.subject,
+            "teacher_id": classroom.teacher_id,
+            "join_code": classroom.join_code,
+            "organization": classroom.organization,
+        },
+    }
+
+
+@app.post("/classrooms/join")
+def join_classroom(
+    payload: JoinClassroomRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can join a classroom")
+
+    join_code = payload.join_code.strip().upper()
+    classroom = db.query(Classroom).filter(Classroom.join_code == join_code).first()
+    if not classroom:
+        raise HTTPException(status_code=404, detail="Invalid classroom join code")
+
+    existing = db.query(ClassroomMembership).filter(
+        ClassroomMembership.classroom_id == classroom.id,
+        ClassroomMembership.user_id == current_user.id,
+    ).first()
+    if existing:
+        return {"message": "You are already a member of this classroom", "classroom_id": classroom.id}
+
+    membership = ClassroomMembership(
+        classroom_id=classroom.id,
+        user_id=current_user.id,
+        role="student",
+        joined_at=datetime.utcnow().isoformat(),
+    )
+    db.add(membership)
+    current_user.subject = classroom.subject
+    db.commit()
+
+    return {
+        "message": "Joined classroom successfully",
+        "classroom": {
+            "id": classroom.id,
+            "name": classroom.name,
+            "subject": classroom.subject,
+            "teacher_id": classroom.teacher_id,
+        },
+    }
+
+
+@app.get("/classrooms")
+def get_classrooms(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role == "teacher":
+        classrooms = db.query(Classroom).filter(Classroom.teacher_id == current_user.id).all()
+    elif current_user.role == "student":
+        membership_ids = db.query(ClassroomMembership.classroom_id).filter(ClassroomMembership.user_id == current_user.id).subquery()
+        classrooms = db.query(Classroom).filter(Classroom.id.in_(membership_ids)).all()
+    else:
+        classrooms = db.query(Classroom).all()
+
+    return {
+        "classrooms": [
+            {
+                "id": item.id,
+                "name": item.name,
+                "subject": item.subject,
+                "teacher_id": item.teacher_id,
+                "join_code": item.join_code,
+                "organization": item.organization,
+            }
+            for item in classrooms
+        ]
+    }
+
+
+@app.post("/teachers/students/add")
+def add_student_to_classroom(
+    payload: TeacherAssignStudentRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in {"teacher", "super_admin"}:
+        raise HTTPException(status_code=403, detail="Only teachers can add students")
+
+    classroom = db.query(Classroom).filter(Classroom.id == payload.classroom_id).first()
+    if not classroom:
+        raise HTTPException(status_code=404, detail="Classroom not found")
+
+    if current_user.role == "teacher" and classroom.teacher_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only add students to your own classroom")
+
+    student = db.query(User).filter(User.email == str(payload.student_email).strip().lower()).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found with this email")
+
+    if student.role != "student":
+        raise HTTPException(status_code=400, detail="Only student accounts can be added")
+
+    existing = db.query(ClassroomMembership).filter(
+        ClassroomMembership.classroom_id == classroom.id,
+        ClassroomMembership.user_id == student.id,
+    ).first()
+    if existing:
+        return {"message": "Student already enrolled in this classroom", "student_id": student.id}
+
+    db.add(ClassroomMembership(
+        classroom_id=classroom.id,
+        user_id=student.id,
+        role="student",
+        joined_at=datetime.utcnow().isoformat(),
+    ))
+    student.subject = classroom.subject
+    db.commit()
+
+    return {
+        "message": "Student added to classroom successfully",
+        "student": {
+            "id": student.id,
+            "name": student.name,
+            "email": student.email,
+            "subject": student.subject,
+        },
+        "classroom_id": classroom.id,
+    }
 
 
 @app.on_event("startup")
