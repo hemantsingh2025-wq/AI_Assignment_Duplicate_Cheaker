@@ -1,0 +1,355 @@
+const user = JSON.parse(localStorage.getItem("user"));
+const token = localStorage.getItem("access_token");
+
+if (!user || !token) {
+    window.location.href = "index.html";
+}
+
+const role = user.role || "student";
+
+if (user) {
+    document.getElementById("adminName").innerText = user.name;
+    document.querySelector(".admin-info small").innerText =
+        role === "super_admin" ? "Super Admin" : role === "teacher" ? "Teacher" : "Student";
+}
+
+function renderRoleLayout() {
+    const teacherButton = document.querySelector('[data-section="teachers"]');
+    const isTeacherAccess = ["teacher", "super_admin"].includes(role);
+
+    if (!isTeacherAccess) {
+        teacherButton.style.display = "none";
+    }
+
+    const welcomeHeader = document.querySelector("#home h2");
+    const sectionText = document.querySelector("#home p");
+
+    if (welcomeHeader) {
+        welcomeHeader.innerText =
+            role === "teacher" || role === "super_admin"
+                ? "Welcome, Teacher/Admin 👋"
+                : "Welcome, Student 👋";
+    }
+
+    if (sectionText) {
+        sectionText.innerText =
+            role === "teacher" || role === "super_admin"
+                ? "Review uploaded assignments and check duplication across the class."
+                : "Upload your assignments and check whether they are similar to each other.";
+    }
+}
+
+function showSection(sectionName) {
+
+    const sections = document.querySelectorAll(".section");
+    const navItems = document.querySelectorAll(".nav-item");
+
+    sections.forEach(section => {
+        section.classList.remove("active");
+    });
+
+    navItems.forEach(item => {
+        item.classList.remove("active");
+    });
+
+    const targetSection = document.getElementById(sectionName);
+    if (targetSection) {
+        targetSection.classList.add("active");
+    }
+
+    const titles = {
+        home: "Dashboard",
+        upload: "Upload Assignments",
+        results: "Similarity Results",
+        teachers: "Teachers"
+    };
+
+    document.getElementById("pageTitle").innerText = titles[sectionName] || "Dashboard";
+
+    const index = {
+        home: 0,
+        upload: 1,
+        results: 2,
+        teachers: 3
+    };
+
+    const targetNav = navItems[index[sectionName]];
+    if (targetNav) {
+        targetNav.classList.add("active");
+    }
+}
+
+function showSelectedFiles() {
+
+    const input = document.getElementById("assignmentFiles");
+    const fileList = document.getElementById("fileList");
+
+    fileList.innerHTML = "";
+
+    const files = Array.from(input.files);
+
+    if (files.length < 2) {
+
+        fileList.innerHTML =
+            "<p>Please select at least 2 assignments.</p>";
+
+        return;
+    }
+
+    if (files.length > 100) {
+
+        fileList.innerHTML =
+            "<p>You can upload maximum 100 assignments.</p>";
+
+        return;
+    }
+
+    files.forEach((file, index) => {
+
+        const item = document.createElement("div");
+
+        item.className = "file-item";
+
+        item.innerText =
+            `${index + 1}. ${file.name}`;
+
+        fileList.appendChild(item);
+    });
+}
+
+function renderComparisonResults(data) {
+    const container = document.getElementById("resultsContainer");
+
+    if (!data.comparisons || data.comparisons.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div>🔍</div>
+                <h3>No duplicate patterns found</h3>
+                <p>Assignments are below the similarity threshold.</p>
+            </div>
+        `;
+        return;
+    }
+
+    const cards = data.comparisons.map(item => `
+        <div class="result-card">
+            <h3>Assignment ${item.assignment_1} vs Assignment ${item.assignment_2}</h3>
+            <p><strong>Similarity:</strong> ${item.similarity_percentage}%</p>
+            <p><strong>Status:</strong> ${item.status}</p>
+        </div>
+    `).join("");
+
+    container.innerHTML = cards;
+}
+
+async function compareAssignments(ids) {
+    const response = await fetch("http://127.0.0.1:8000/assignments/check-similarity", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ assignment_ids: ids })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        throw new Error(data.detail || "Similarity check failed.");
+    }
+
+    renderComparisonResults(data);
+    return data;
+}
+
+async function loadMyAssignments() {
+    const response = await fetch("http://127.0.0.1:8000/assignments/my-uploads", {
+        headers: {
+            "Authorization": `Bearer ${token}`
+        }
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        throw new Error(data.detail || "Unable to load assignments.");
+    }
+
+    return data.assignments || [];
+}
+
+async function loadAllAssignments() {
+    const response = await fetch("http://127.0.0.1:8000/assignments/all", {
+        headers: {
+            "Authorization": `Bearer ${token}`
+        }
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        throw new Error(data.detail || "Unable to load assignments.");
+    }
+
+    return data.assignments || [];
+}
+
+async function reviewAssignment(assignmentId, decision) {
+    const response = await fetch("http://127.0.0.1:8000/assignments/review", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ assignment_id: assignmentId, decision })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.detail || "Review action failed.");
+    }
+
+    return data;
+}
+
+async function loadTeacherReviewList() {
+    const reviewList = document.getElementById("teacherReviewList");
+    if (!reviewList) return;
+
+    try {
+        const response = await fetch("http://127.0.0.1:8000/assignments/all", {
+            headers: {
+                "Authorization": `Bearer ${token}`
+            }
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.detail || "Failed to load assignments.");
+        }
+
+        const items = data.assignments || [];
+        if (!items.length) {
+            reviewList.innerHTML = "<p>No assignments for review yet.</p>";
+            return;
+        }
+
+        reviewList.innerHTML = items.map(item => `
+            <div class="result-card">
+                <p><strong>Student:</strong> ${item.uploader_name || "Unknown"}</p>
+                <p><strong>Subject:</strong> ${item.subject || "General"}</p>
+                <p><strong>File:</strong> ${item.filename}</p>
+                <p><strong>Status:</strong> ${item.review_status || "pending"}</p>
+                <div style="display:flex; gap:10px; margin-top:10px;">
+                    <button onclick="reviewAssignment(${item.id}, 'pass').then(() => loadTeacherReviewList()).catch(err => alert(err.message))">Pass</button>
+                    <button onclick="reviewAssignment(${item.id}, 'reject').then(() => loadTeacherReviewList()).catch(err => alert(err.message))">Reject</button>
+                </div>
+            </div>
+        `).join("");
+
+    } catch (error) {
+        reviewList.innerHTML = `<p>${error.message}</p>`;
+    }
+}
+
+async function checkSimilarity() {
+
+    const input = document.getElementById("assignmentFiles");
+    const subjectSelect = document.getElementById("subjectSelect");
+    const message = document.getElementById("uploadMessage");
+
+    if (input.files.length < 2) {
+        message.innerText = "Please upload at least 2 assignments.";
+        return;
+    }
+
+    if (input.files.length > 100) {
+        message.innerText = "Maximum 100 assignments allowed.";
+        return;
+    }
+
+    const subject = subjectSelect.value;
+    const formData = new FormData();
+    Array.from(input.files).forEach(file => formData.append("files", file));
+    formData.append("subject", subject);
+
+    message.innerText = "Uploading assignments and checking for duplicates...";
+
+    try {
+        const uploadResponse = await fetch("http://127.0.0.1:8000/assignments/upload", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${token}`
+            },
+            body: formData
+        });
+
+        const uploadData = await uploadResponse.json();
+
+        if (!uploadResponse.ok) {
+            throw new Error(uploadData.detail || "Upload failed.");
+        }
+
+        const uploadedIds = (uploadData.results || [])
+            .filter(item => item.status === "success" && item.assignment_id)
+            .map(item => item.assignment_id);
+
+        if (uploadedIds.length < 2) {
+            message.innerText = "At least 2 valid assignment files are required to compare.";
+            return;
+        }
+
+        await compareAssignments(uploadedIds);
+        showSection("results");
+        message.innerText = "Similarity check completed.";
+
+    } catch (error) {
+        console.error(error);
+        message.innerText = error.message || "Similarity check failed.";
+    }
+}
+
+async function loadDashboardData() {
+    const totalAssignmentsEl = document.getElementById("totalAssignments");
+    const duplicateAssignmentsEl = document.getElementById("duplicateAssignments");
+    const totalTeachersEl = document.getElementById("totalTeachers");
+
+    try {
+        const assignments =
+            role === "teacher" || role === "super_admin"
+                ? await loadAllAssignments()
+                : await loadMyAssignments();
+
+        totalAssignmentsEl.innerText = String(assignments.length || 0);
+
+        const duplicates = assignments.filter(item => item.is_duplicate).length;
+        duplicateAssignmentsEl.innerText = String(duplicates);
+
+        if (role === "teacher" || role === "super_admin") {
+            totalTeachersEl.innerText = "1";
+        } else {
+            totalTeachersEl.innerText = "0";
+        }
+
+    } catch (error) {
+        console.error(error);
+        totalAssignmentsEl.innerText = "0";
+        duplicateAssignmentsEl.innerText = "0";
+        totalTeachersEl.innerText = "0";
+    }
+}
+
+function logout() {
+
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("user");
+
+    window.location.href = "index.html";
+}
+
+renderRoleLayout();
+loadDashboardData();
+if (role === "teacher" || role === "super_admin") {
+    loadTeacherReviewList();
+}
+showSection("home");

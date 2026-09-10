@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Assignment Checker</title>
+    <link rel="stylesheet" href="dashboard.css">
+</head>
+
+<body>
+
+<div class="dashboard">
+
+    <aside class="sidebar">
+
+        <div class="logo">
+            <div class="logo-box">AI</div>
+            <span>Assignment Checker</span>
+        </div>
+
+        <nav>
+            <button class="nav-item active" data-section="home" onclick="showSection('home')">
+                🏠 Dashboard
+            </button>
+
+            <button class="nav-item" data-section="upload" onclick="showSection('upload')">
+                📤 Upload Assignments
+            </button>
+
+            <button class="nav-item" data-section="results" onclick="showSection('results')">
+                🔍 Similarity Results
+            </button>
+
+            <button class="nav-item" data-section="teachers" onclick="showSection('teachers')">
+                👨‍🏫 Teachers
+            </button>
+        </nav>
+
+        <button class="logout-btn" onclick="logout()">
+            🚪 Logout
+        </button>
+
+    </aside>
+
+
+    <main class="main">
+
+        <header class="topbar">
+            <div>
+                <h1 id="pageTitle">Dashboard</h1>
+                <p>AI Assignment Duplicate Checker</p>
+            </div>
+
+            <div class="admin-info">
+                <div class="avatar">HS</div>
+                <div>
+                    <strong id="adminName">Admin</strong>
+                    <small>Super Admin</small>
+                </div>
+            </div>
+        </header>
+
+
+        <!-- DASHBOARD HOME -->
+
+        <section id="home" class="section active">
+
+            <div class="cards">
+
+                <div class="card">
+                    <div class="card-icon">📄</div>
+                    <div>
+                        <h3 id="totalAssignments">0</h3>
+                        <p>Total Assignments</p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-icon">⚠️</div>
+                    <div>
+                        <h3 id="duplicateAssignments">0</h3>
+                        <p>Duplicate Groups</p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-icon">👨‍🏫</div>
+                    <div>
+                        <h3 id="totalTeachers">0</h3>
+                        <p>Teachers</p>
+                    </div>
+                </div>
+
+                <div class="card danger">
+                    <div class="card-icon">🚨</div>
+                    <div>
+                        <h3>85%+</h3>
+                        <p>High Similarity</p>
+                    </div>
+                </div>
+
+            </div>
+
+
+            <div class="welcome-box">
+
+                <h2>Welcome, Admin 👋</h2>
+
+                <p>
+                    Upload handwritten assignments and check their
+                    similarity using OCR and AI-based analysis.
+                </p>
+
+                <button onclick="showSection('upload')">
+                    Upload Assignments
+                </button>
+
+            </div>
+
+        </section>
+
+
+        <!-- UPLOAD SECTION -->
+
+        <section id="upload" class="section">
+
+            <div class="section-header">
+                <h2>Upload Assignments</h2>
+                <p>Select 2 to 100 assignment files.</p>
+            </div>
+
+            <div class="upload-box">
+
+                <div class="upload-icon">📤</div>
+
+                <h3>Select Subject and Files</h3>
+
+                <p>
+                    JPG, JPEG, PNG or PDF
+                </p>
+
+                <label for="subjectSelect">Subject</label>
+                <select id="subjectSelect">
+                    <option value="Mathematics">Mathematics</option>
+                    <option value="Physics">Physics</option>
+                    <option value="Chemistry">Chemistry</option>
+                    <option value="Computer Science">Computer Science</option>
+                    <option value="English">English</option>
+                    <option value="Biology">Biology</option>
+                    <option value="History">History</option>
+                    <option value="Economics">Economics</option>
+                </select>
+
+                <input
+                    type="file"
+                    id="assignmentFiles"
+                    multiple
+                    accept=".jpg,.jpeg,.png,.pdf"
+                    onchange="showSelectedFiles()"
+                >
+
+                <label for="assignmentFiles" class="choose-btn">
+                    Choose Files
+                </label>
+
+                <div id="fileList"></div>
+
+                <button
+                    class="check-btn"
+                    onclick="checkSimilarity()"
+                >
+                    🔍 Check Similarity
+                </button>
+
+                <p id="uploadMessage"></p>
+
+            </div>
+
+        </section>
+
+
+        <!-- RESULTS SECTION -->
+
+        <section id="results" class="section">
+
+            <div class="section-header">
+                <h2>Similarity Results</h2>
+                <p>Assignments with 85% or higher similarity.</p>
+            </div>
+
+            <div id="resultsContainer">
+
+                <div class="empty-state">
+                    <div>🔍</div>
+                    <h3>No results yet</h3>
+                    <p>
+                        Upload assignments to start similarity checking.
+                    </p>
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- TEACHERS SECTION -->
+
+        <section id="teachers" class="section">
+
+            <div class="section-header">
+                <h2>Teacher Management</h2>
+                <p>Manage teachers using the admin panel.</p>
+            </div>
+
+            <div class="teacher-box">
+
+                <h3>Teacher Subject Review</h3>
+
+                <div id="teacherReviewList">
+                    <p>No assignments for review yet.</p>
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+</div>
+
+<script src="dashboard.js"></script>
+
+</body>
+</html>
