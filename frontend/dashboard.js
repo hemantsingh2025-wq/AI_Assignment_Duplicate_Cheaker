@@ -1,23 +1,36 @@
-const user = JSON.parse(localStorage.getItem("user"));
-const token = localStorage.getItem("access_token");
+let user = null;
+let token = localStorage.getItem("access_token");
+
+try {
+    const storedUser = localStorage.getItem("user");
+    user = storedUser ? JSON.parse(storedUser) : null;
+} catch (error) {
+    console.error("Invalid saved user data", error);
+    user = null;
+    localStorage.removeItem("user");
+}
 
 if (!user || !token) {
     window.location.href = "index.html";
 }
 
-const role = user.role || "student";
+const role = user?.role || "student";
 
 if (user) {
-    document.getElementById("adminName").innerText = user.name;
-    document.querySelector(".admin-info small").innerText =
-        role === "super_admin" ? "Super Admin" : role === "teacher" ? "Teacher" : "Student";
+    const adminNameEl = document.getElementById("adminName");
+    const adminRoleEl = document.querySelector(".admin-info small");
+
+    if (adminNameEl) adminNameEl.innerText = user.name || "User";
+    if (adminRoleEl) {
+        adminRoleEl.innerText = role === "super_admin" ? "Super Admin" : role === "teacher" ? "Teacher" : "Student";
+    }
 }
 
 function renderRoleLayout() {
     const teacherButton = document.querySelector('[data-section="teachers"]');
     const isTeacherAccess = ["teacher", "super_admin"].includes(role);
 
-    if (!isTeacherAccess) {
+    if (teacherButton && !isTeacherAccess) {
         teacherButton.style.display = "none";
     }
 
@@ -37,6 +50,12 @@ function renderRoleLayout() {
                 ? "Review uploaded assignments and check duplication across the class."
                 : "Upload your assignments and check whether they are similar to each other.";
     }
+}
+
+function logout() {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("user");
+    window.location.href = "index.html";
 }
 
 function showSection(sectionName) {

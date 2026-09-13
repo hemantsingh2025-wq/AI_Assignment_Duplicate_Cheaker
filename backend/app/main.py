@@ -2,6 +2,7 @@
 # AI ASSIGNMENT DUPLICATE CHECKER - MAIN.PY
 # =========================================================
 import os
+import re
 import secrets
 import smtplib
 import uuid
@@ -141,6 +142,10 @@ OTP_EXPIRY_MINUTES = 10
 MAX_OTP_ATTEMPTS = 5
 
 
+def allow_dev_otp() -> bool:
+    return os.getenv("ALLOW_DEV_OTP", "true").lower() == "true"
+
+
 def send_signup_otp(email: str, otp: str):
     smtp_host = os.getenv("SMTP_HOST")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
@@ -149,7 +154,7 @@ def send_signup_otp(email: str, otp: str):
     sender_email = os.getenv("SMTP_FROM", smtp_username or "")
 
     if not all((smtp_host, smtp_username, smtp_password, sender_email)):
-        if os.getenv("ALLOW_DEV_OTP", "false").lower() == "true":
+        if allow_dev_otp():
             return False
         raise RuntimeError("Email service is not configured")
 
@@ -197,6 +202,8 @@ def is_college_email(email: str) -> bool:
         "campus",
         ".edu.",
         ".edu",
+        ".org",
+        "org",
     )
 
     if any(marker in domain for marker in allowed_markers):
@@ -375,6 +382,18 @@ def health():
 
     return {
         "status": "healthy"
+    }
+
+
+@app.get("/me")
+def get_me(current_user: User = Depends(get_current_user)):
+    return {
+        "id": current_user.id,
+        "name": current_user.name,
+        "email": current_user.email,
+        "role": current_user.role,
+        "subject": current_user.subject,
+        "organization": current_user.organization,
     }
 
 
@@ -604,7 +623,7 @@ def signup(
         "role": requested_role,
         "expires_in_minutes": OTP_EXPIRY_MINUTES,
     }
-    if not email_sent and os.getenv("ALLOW_DEV_OTP", "false").lower() == "true":
+    if not email_sent and allow_dev_otp():
         response["development_otp"] = otp
     return response
 
@@ -681,6 +700,24 @@ def verify_signup(
 # OCR - IMAGE
 # =========================================================
 
+def clean_ocr_text(text: str | None) -> str:
+    if text is None:
+        return ""
+
+    cleaned = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]", " ", str(text))
+    cleaned = cleaned.replace("\r", " ").replace("\n", " ")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+    if not cleaned:
+        return ""
+
+    alpha_count = sum(1 for ch in cleaned if ch.isalpha())
+    if alpha_count < max(8, int(len(cleaned) * 0.15)):
+        return ""
+
+    return cleaned
+
+
 def extract_text_from_image(
     file_path: str
 ):
@@ -694,11 +731,11 @@ def extract_text_from_image(
             lang="eng"
         )
 
-        return text.strip()
+        return clean_ocr_text(text)
 
     except Exception as e:
 
-        return f"OCR Error: {str(e)}"
+        return ""
 
 
 # =========================================================
@@ -723,11 +760,11 @@ def extract_text_from_pdf(
 
                 text += page_text + "\n"
 
-        return text.strip()
+        return clean_ocr_text(text)
 
-    except Exception as e:
+    except Exception:
 
-        return f"PDF OCR Error: {str(e)}"
+        return ""
 
 
 # =========================================================
@@ -857,6 +894,8 @@ async def upload_assignments(
                 buffer.write(contents)
 
             text = extract_assignment_text(str(save_path))
+            if not text or len(text.strip()) < 20:
+                raise ValueError("No readable text detected. Please upload a clearer assignment image or PDF.")
 
             assignment = Assignment(
                 filename=original_filename,
@@ -1079,14 +1118,14 @@ def check_similarity(
     for text in texts:
         if text is None:
             text = ""
-        cleaned_texts.append(str(text).strip())
-
-    cleaned_texts = [text for text in cleaned_texts if text]
+        cleaned = clean_ocr_text(str(text))
+        if cleaned:
+            cleaned_texts.append(cleaned)
 
     if len(cleaned_texts) < 2:
         raise HTTPException(
             status_code=400,
-            detail="At least 2 valid assignment texts are required"
+            detail="No readable text was detected in enough assignments. Please upload clearer assignment scans or PDFs."
         )
 
     try:

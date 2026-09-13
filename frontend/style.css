@@ -48,6 +48,7 @@ body {
   padding: 2rem;
   border-radius: 16px;
   box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+  width: min(100%, 460px);
 }
 
 .login-card h2 {
@@ -59,6 +60,37 @@ body {
   font-size: 0.9rem;
   color: #666;
   margin-bottom: 1.5rem;
+}
+
+.auth-toggle {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.2rem;
+}
+
+.toggle-btn {
+  flex: 1;
+  border: 1px solid #ffb3c1;
+  background: #fff3f5;
+  color: #7d2539;
+  border-radius: 999px;
+  padding: 0.7rem 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.toggle-btn.active {
+  background: linear-gradient(135deg, #ff4b6e, #ff758c);
+  color: #fff;
+  border-color: #ff4b6e;
+}
+
+.auth-panel {
+  display: none;
+}
+
+.auth-panel.active {
+  display: block;
 }
 
 /* Form Groups */
@@ -73,48 +105,26 @@ label {
   color: #444;
 }
 
-input {
+input,
+select {
   width: 100%;
   padding: 0.75rem;
   border: 1px solid #ddd;
   border-radius: 10px;
   font-size: 1rem;
   transition: border 0.3s ease;
+  box-sizing: border-box;
+  margin-bottom: 0.9rem;
 }
 
-input:focus {
+input:focus,
+select:focus {
   border-color: #ff4b6e;
   outline: none;
   box-shadow: 0 0 6px rgba(255, 75, 110, 0.3);
 }
 
 /* Button */
-.btn-primary {
-  width: 100%;
-  padding: 0.85rem;
-  background: #ff4b6e;
-  color: #fff;
-  border: none;
-  border-radius: 10px;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.3s ease, transform 0.2s ease;
-}
-
-.btn-primary:hover {
-  background: #e63a5d;
-  transform: translateY(-2px);
-}
-
-/* Message */
-.message {
-  margin-top: 1rem;
-  text-align: center;
-  color: #e63946;
-  font-weight: 500;
-}
-/* Login Button */
 .btn-primary {
   width: 100%;
   padding: 0.85rem;
@@ -127,6 +137,7 @@ input:focus {
   cursor: pointer;
   transition: all 0.3s ease;
   box-shadow: 0 6px 15px rgba(255, 75, 110, 0.3);
+  margin-top: 0.3rem;
 }
 
 .btn-primary:hover {
@@ -139,3 +150,13 @@ input:focus {
   transform: scale(0.97);
   box-shadow: 0 4px 12px rgba(255, 75, 110, 0.3);
 }
+
+/* Message */
+.message {
+  margin-top: 1rem;
+  text-align: center;
+  color: #1f7a1f;
+  font-weight: 500;
+  min-height: 1.5rem;
+}
+
