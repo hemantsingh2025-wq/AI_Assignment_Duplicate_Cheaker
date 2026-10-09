@@ -1,4 +1,4 @@
-const API_BASE = "http://127.0.0.1:8000";
+const API_BASE = window.ASSIGNMENT_CHECKER_API_URL;
 
 function setMessage(text, isError = false) {
     const message = document.getElementById("message");
@@ -63,11 +63,6 @@ async function login() {
 
     if (!email || !password) {
         setMessage("Please enter your email and password.", true);
-        return;
-    }
-
-    if (!isCollegeEmail(email)) {
-        setMessage("Students must use a college or university email address.", true);
         return;
     }
 

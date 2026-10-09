@@ -226,6 +226,27 @@ nav {
     margin: 8px 0 20px;
 }
 
+.upload-box select,
+.classroom-form input,
+.classroom-form select {
+    width: 100%;
+    padding: 11px 12px;
+    margin: 8px 0 16px;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    font: inherit;
+}
+
+#classroomUploadField {
+    max-width: 420px;
+    margin: 18px auto 0;
+    text-align: left;
+}
+
+#classroomUploadField[hidden] {
+    display: none;
+}
+
 #assignmentFiles {
     display: none;
 }
@@ -292,6 +313,42 @@ nav {
 .teacher-box p {
     margin: 10px 0 20px;
     color: #64748b;
+}
+
+.classroom-management {
+    max-width: 760px;
+}
+
+.classroom-form {
+    max-width: 460px;
+    margin-bottom: 28px;
+}
+
+.classroom-form label {
+    display: block;
+    font-weight: 600;
+}
+
+.classroom-form button {
+    padding: 11px 18px;
+    border: 0;
+    border-radius: 7px;
+    background: #2563eb;
+    color: white;
+    cursor: pointer;
+}
+
+.classroom-item {
+    padding: 12px 0;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.classroom-item p {
+    margin: 4px 0;
+}
+
+#classroomMessage {
+    font-weight: 600;
 }
 
 /* MOBILE */

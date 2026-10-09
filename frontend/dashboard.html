@@ -31,6 +31,10 @@
                 🔍 Similarity Results
             </button>
 
+            <button class="nav-item" data-section="classrooms" onclick="showSection('classrooms')">
+                🏫 Classrooms
+            </button>
+
             <button class="nav-item" data-section="teachers" onclick="showSection('teachers')">
                 👨‍🏫 Teachers
             </button>
@@ -141,6 +145,7 @@
 
                 <label for="subjectSelect">Subject</label>
                 <select id="subjectSelect">
+                    <option value="">Select a subject</option>
                     <option value="Mathematics">Mathematics</option>
                     <option value="Physics">Physics</option>
                     <option value="Chemistry">Chemistry</option>
@@ -150,6 +155,14 @@
                     <option value="History">History</option>
                     <option value="Economics">Economics</option>
                 </select>
+
+                <div id="classroomUploadField">
+                    <label for="classroomSelect">Classroom</label>
+                    <select id="classroomSelect">
+                        <option value="">Select a classroom</option>
+                    </select>
+                    <p id="classroomUploadHint">Students must join a classroom before uploading.</p>
+                </div>
 
                 <input
                     type="file"
@@ -202,6 +215,22 @@
 
         </section>
 
+        <section id="classrooms" class="section">
+            <div class="section-header">
+                <h2>Classrooms</h2>
+                <p>Join a classroom with its code, or create one for your students.</p>
+            </div>
+
+            <div class="teacher-box classroom-management">
+                <div id="classroomActions"></div>
+                <p id="classroomMessage" role="status"></p>
+                <h3>Your Classrooms</h3>
+                <div id="classroomList">
+                    <p>Loading classrooms...</p>
+                </div>
+            </div>
+        </section>
+
 
         <!-- TEACHERS SECTION -->
 
@@ -228,6 +257,7 @@
 
 </div>
 
+<script src="api-config.js"></script>
 <script src="dashboard.js"></script>
 
 </body>

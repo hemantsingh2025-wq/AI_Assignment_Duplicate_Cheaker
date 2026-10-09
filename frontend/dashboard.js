@@ -1,5 +1,6 @@
 let user = null;
 let token = localStorage.getItem("access_token");
+const API_BASE = window.ASSIGNMENT_CHECKER_API_URL;
 
 try {
     const storedUser = localStorage.getItem("user");
@@ -15,6 +16,38 @@ if (!user || !token) {
 }
 
 const role = user?.role || "student";
+
+async function requestApi(path, options = {}) {
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        ...(options.headers || {}),
+    };
+
+    if (!(options.body instanceof FormData) && !headers["Content-Type"]) {
+        headers["Content-Type"] = "application/json";
+    }
+
+    const response = await fetch(`${API_BASE}${path}`, {
+        ...options,
+        headers,
+    });
+    const text = await response.text();
+    let data = {};
+
+    if (text) {
+        try {
+            data = JSON.parse(text);
+        } catch {
+            data = { detail: text };
+        }
+    }
+
+    if (!response.ok) {
+        throw new Error(data.detail || data.message || "Request failed.");
+    }
+
+    return data;
+}
 
 if (user) {
     const adminNameEl = document.getElementById("adminName");
@@ -80,19 +113,13 @@ function showSection(sectionName) {
         home: "Dashboard",
         upload: "Upload Assignments",
         results: "Similarity Results",
+        classrooms: "Classrooms",
         teachers: "Teachers"
     };
 
     document.getElementById("pageTitle").innerText = titles[sectionName] || "Dashboard";
 
-    const index = {
-        home: 0,
-        upload: 1,
-        results: 2,
-        teachers: 3
-    };
-
-    const targetNav = navItems[index[sectionName]];
+    const targetNav = document.querySelector(`[data-section="${sectionName}"]`);
     if (targetNav) {
         targetNav.classList.add("active");
     }
@@ -162,7 +189,7 @@ function renderComparisonResults(data) {
 }
 
 async function compareAssignments(ids) {
-    const response = await fetch("http://127.0.0.1:8000/assignments/check-similarity", {
+    const response = await fetch(`${API_BASE}/assignments/check-similarity`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -182,7 +209,7 @@ async function compareAssignments(ids) {
 }
 
 async function loadMyAssignments() {
-    const response = await fetch("http://127.0.0.1:8000/assignments/my-uploads", {
+    const response = await fetch(`${API_BASE}/assignments/my-uploads`, {
         headers: {
             "Authorization": `Bearer ${token}`
         }
@@ -198,7 +225,7 @@ async function loadMyAssignments() {
 }
 
 async function loadAllAssignments() {
-    const response = await fetch("http://127.0.0.1:8000/assignments/all", {
+    const response = await fetch(`${API_BASE}/assignments/all`, {
         headers: {
             "Authorization": `Bearer ${token}`
         }
@@ -214,7 +241,7 @@ async function loadAllAssignments() {
 }
 
 async function reviewAssignment(assignmentId, decision) {
-    const response = await fetch("http://127.0.0.1:8000/assignments/review", {
+    const response = await fetch(`${API_BASE}/assignments/review`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -236,7 +263,7 @@ async function loadTeacherReviewList() {
     if (!reviewList) return;
 
     try {
-        const response = await fetch("http://127.0.0.1:8000/assignments/all", {
+        const response = await fetch(`${API_BASE}/assignments/all`, {
             headers: {
                 "Authorization": `Bearer ${token}`
             }
@@ -271,6 +298,145 @@ async function loadTeacherReviewList() {
     }
 }
 
+function renderClassroomActions() {
+    const actions = document.getElementById("classroomActions");
+    const subjects = Array.from(document.getElementById("subjectSelect").options)
+        .filter(option => option.value)
+        .map(option => `<option value="${option.value}">${option.textContent}</option>`)
+        .join("");
+
+    if (role === "student") {
+        actions.innerHTML = `
+            <form class="classroom-form" onsubmit="joinClassroom(event)">
+                <h3>Join a Classroom</h3>
+                <label for="classroomJoinCode">Classroom join code</label>
+                <input id="classroomJoinCode" type="text" required maxlength="32" autocomplete="off">
+                <button type="submit">Join Classroom</button>
+            </form>
+        `;
+        return;
+    }
+
+    actions.innerHTML = `
+        <form class="classroom-form" onsubmit="createClassroom(event)">
+            <h3>Create a Classroom</h3>
+            <label for="classroomName">Classroom name</label>
+            <input id="classroomName" type="text" required maxlength="100">
+            <label for="classroomSubject">Subject</label>
+            <select id="classroomSubject" required>
+                <option value="">Select a subject</option>
+                ${subjects}
+            </select>
+            <label for="classroomCreateCode">Join code (optional)</label>
+            <input id="classroomCreateCode" type="text" maxlength="32" autocomplete="off">
+            <button type="submit">Create Classroom</button>
+        </form>
+    `;
+}
+
+async function loadClassrooms() {
+    const classroomList = document.getElementById("classroomList");
+    const classroomSelect = document.getElementById("classroomSelect");
+    const classroomField = document.getElementById("classroomUploadField");
+    const subjectSelect = document.getElementById("subjectSelect");
+
+    classroomField.hidden = role !== "student";
+    subjectSelect.disabled = role === "student";
+    renderClassroomActions();
+
+    try {
+        const data = await requestApi("/classrooms");
+        const classrooms = data.classrooms || [];
+
+        classroomSelect.replaceChildren(new Option("Select a classroom", ""));
+        classroomList.replaceChildren();
+
+        if (!classrooms.length) {
+            classroomList.innerHTML = "<p>No classrooms yet.</p>";
+        } else {
+            classrooms.forEach(classroom => {
+                const item = document.createElement("div");
+                item.className = "classroom-item";
+
+                const details = document.createElement("p");
+                details.textContent = `${classroom.name} — ${classroom.subject}`;
+                item.appendChild(details);
+
+                if (classroom.join_code && role !== "student") {
+                    const code = document.createElement("p");
+                    code.textContent = `Join code: ${classroom.join_code}`;
+                    item.appendChild(code);
+                }
+
+                classroomList.appendChild(item);
+                classroomSelect.add(new Option(
+                    `${classroom.name} — ${classroom.subject}`,
+                    String(classroom.id),
+                ));
+            });
+        }
+
+        classroomSelect.onchange = () => {
+            const classroom = classrooms.find(item =>
+                String(item.id) === classroomSelect.value
+            );
+            if (classroom) {
+                subjectSelect.value = classroom.subject;
+            }
+        };
+
+        document.getElementById("classroomUploadHint").textContent =
+            classrooms.length
+                ? "Choose the classroom this assignment belongs to."
+                : "Join a classroom before uploading assignments.";
+    } catch (error) {
+        classroomList.textContent = error.message;
+        document.getElementById("classroomUploadHint").textContent =
+            "Unable to load classrooms. Please try again.";
+    }
+}
+
+async function createClassroom(event) {
+    event.preventDefault();
+    const message = document.getElementById("classroomMessage");
+
+    try {
+        const data = await requestApi("/classrooms", {
+            method: "POST",
+            body: JSON.stringify({
+                name: document.getElementById("classroomName").value.trim(),
+                subject: document.getElementById("classroomSubject").value,
+                join_code: document.getElementById("classroomCreateCode").value.trim() || null,
+            }),
+        });
+        message.textContent =
+            `${data.message}. Share join code ${data.classroom.join_code} with students.`;
+        event.target.reset();
+        await loadClassrooms();
+    } catch (error) {
+        message.textContent = error.message;
+    }
+}
+
+async function joinClassroom(event) {
+    event.preventDefault();
+    const message = document.getElementById("classroomMessage");
+
+    try {
+        const data = await requestApi("/classrooms/join", {
+            method: "POST",
+            body: JSON.stringify({
+                join_code: document.getElementById("classroomJoinCode").value.trim(),
+            }),
+        });
+        message.textContent = data.message;
+        event.target.reset();
+        await loadClassrooms();
+    } catch (error) {
+        message.textContent = error.message;
+    }
+}
+
 async function checkSimilarity() {
 
     const input = document.getElementById("assignmentFiles");
@@ -288,14 +454,29 @@ async function checkSimilarity() {
     }
 
     const subject = subjectSelect.value;
+    const classroomId = document.getElementById("classroomSelect").value;
+
+    if (!subject) {
+        message.innerText = "Please select a subject.";
+        return;
+    }
+
+    if (role === "student" && !classroomId) {
+        message.innerText = "Join and select a classroom before uploading.";
+        return;
+    }
+
     const formData = new FormData();
     Array.from(input.files).forEach(file => formData.append("files", file));
     formData.append("subject", subject);
+    if (classroomId) {
+        formData.append("classroom_id", classroomId);
+    }
 
     message.innerText = "Uploading assignments and checking for duplicates...";
 
     try {
-        const uploadResponse = await fetch("http://127.0.0.1:8000/assignments/upload", {
+        const uploadResponse = await fetch(`${API_BASE}/assignments/upload`, {
             method: "POST",
             headers: {
                 "Authorization": `Bearer ${token}`
@@ -368,6 +549,7 @@ function logout() {
 
 renderRoleLayout();
 loadDashboardData();
+loadClassrooms();
 if (role === "teacher" || role === "super_admin") {
     loadTeacherReviewList();
 }
