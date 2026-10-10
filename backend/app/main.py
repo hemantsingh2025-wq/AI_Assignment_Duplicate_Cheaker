@@ -6,6 +6,7 @@ import re
 import secrets
 import smtplib
 import uuid
+import logging
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 from pathlib import Path
@@ -67,6 +68,20 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def rewrite_vercel_api_path(request, call_next):
+    route_path = request.query_params.get("__route")
+    if route_path:
+        route_path = "/" + route_path.lstrip("/")
+    elif request.url.path.startswith("/api/"):
+        route_path = request.url.path[4:]
+
+    if route_path:
+        request.scope["path"] = route_path
+        request.scope["raw_path"] = route_path.encode("utf-8")
+    return await call_next(request)
+
+
 # =========================================================
 # DATABASE
 # =========================================================
@@ -105,7 +120,12 @@ security = HTTPBearer()
 # DIRECTORIES
 # =========================================================
 
-UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR = Path(
+    os.getenv(
+        "UPLOAD_DIR",
+        "/tmp/assignment-checker-uploads" if os.getenv("VERCEL") == "1" else "uploads",
+    )
+)
 
 UPLOAD_DIR.mkdir(
     parents=True,
@@ -140,10 +160,14 @@ SUBJECTS = [
 
 OTP_EXPIRY_MINUTES = 10
 MAX_OTP_ATTEMPTS = 5
+logger = logging.getLogger(__name__)
 
 
 def allow_dev_otp() -> bool:
-    return os.getenv("ALLOW_DEV_OTP", "true").lower() == "true"
+    configured_value = os.getenv("ALLOW_DEV_OTP")
+    if configured_value is not None:
+        return configured_value.lower() == "true"
+    return os.getenv("VERCEL") != "1"
 
 
 def send_signup_otp(email: str, otp: str):
@@ -156,7 +180,10 @@ def send_signup_otp(email: str, otp: str):
     if not all((smtp_host, smtp_username, smtp_password, sender_email)):
         if allow_dev_otp():
             return False
-        raise RuntimeError("Email service is not configured")
+        raise RuntimeError(
+            "Email delivery is not configured. Set SMTP_HOST, SMTP_PORT, "
+            "SMTP_USERNAME, SMTP_PASSWORD, and SMTP_FROM in the backend environment."
+        )
 
     message = EmailMessage()
     message["Subject"] = "Assignment Checker email verification code"
@@ -613,9 +640,17 @@ def signup(
     try:
         email_sent = send_signup_otp(email, otp)
         db.commit()
-    except Exception:
+    except (RuntimeError, ValueError) as exc:
         db.rollback()
-        raise HTTPException(status_code=503, detail="Unable to send verification email")
+        logger.error("Signup OTP email is not configured: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except (smtplib.SMTPException, OSError) as exc:
+        db.rollback()
+        logger.exception("Signup OTP email delivery failed")
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to deliver the verification email. Check the backend SMTP settings.",
+        ) from exc
 
     response = {
         "message": "Verification OTP sent to your college email",
@@ -1067,6 +1102,7 @@ def check_similarity(
     texts = None
     assignment_ids = None
     subject = None
+    source_assignments = None
 
     if isinstance(payload, list):
         texts = payload
@@ -1094,13 +1130,15 @@ def check_similarity(
                 Assignment.uploaded_by == current_user.id,
             ).all()
 
-        if len(assignments) < 2:
+        assignments_by_id = {assignment.id: assignment for assignment in assignments}
+        if len(assignments_by_id) != len(assignment_ids):
             raise HTTPException(
                 status_code=403,
                 detail="You can only compare assignments you are allowed to access",
             )
 
-        texts = [assignment.extracted_text or "" for assignment in assignments]
+        source_assignments = [assignments_by_id[assignment_id] for assignment_id in assignment_ids]
+        texts = [assignment.extracted_text or "" for assignment in source_assignments]
 
     if texts is None:
         raise HTTPException(
@@ -1115,12 +1153,18 @@ def check_similarity(
         )
 
     cleaned_texts = []
-    for text in texts:
+    comparison_assignments = []
+    for index, text in enumerate(texts):
         if text is None:
             text = ""
         cleaned = clean_ocr_text(str(text))
         if cleaned:
             cleaned_texts.append(cleaned)
+            assignment = source_assignments[index] if source_assignments else None
+            comparison_assignments.append({
+                "id": assignment.id if assignment else None,
+                "filename": assignment.filename if assignment else f"Assignment {index + 1}",
+            })
 
     if len(cleaned_texts) < 2:
         raise HTTPException(
@@ -1141,10 +1185,11 @@ def check_similarity(
     comparisons = []
     for i in range(len(cleaned_texts)):
         for j in range(i + 1, len(cleaned_texts)):
-            score = similarity_matrix[i][j] * 100
-            if score >= 80:
+            score = float(similarity_matrix[i][j])
+            score_percentage = score * 100
+            if score_percentage >= 80:
                 status_text = "High Similarity"
-            elif score >= 50:
+            elif score_percentage >= 50:
                 status_text = "Moderate Similarity"
             else:
                 status_text = "Low Similarity"
@@ -1152,12 +1197,18 @@ def check_similarity(
             comparisons.append({
                 "assignment_1": i + 1,
                 "assignment_2": j + 1,
-                "similarity_percentage": round(float(score), 2),
+                "assignment_1_id": comparison_assignments[i]["id"],
+                "assignment_2_id": comparison_assignments[j]["id"],
+                "assignment_1_name": comparison_assignments[i]["filename"],
+                "assignment_2_name": comparison_assignments[j]["filename"],
+                "cosine_similarity": round(score, 4),
+                "similarity_percentage": round(score_percentage, 2),
                 "status": status_text,
             })
 
     return {
         "message": "Similarity check completed",
+        "method": "TF-IDF cosine similarity",
         "total_assignments": len(cleaned_texts),
         "comparisons": comparisons,
     }

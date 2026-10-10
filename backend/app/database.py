@@ -1,7 +1,15 @@
+import os
+from pathlib import Path
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-DATABASE_URL = "sqlite:///./assignment_checker.db"
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    if os.getenv("VERCEL") == "1":
+        DATABASE_URL = f"sqlite:///{Path('/tmp/assignment_checker.db')}"
+    else:
+        DATABASE_URL = "sqlite:///./assignment_checker.db"
 
 engine = create_engine(
     DATABASE_URL,

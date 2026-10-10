@@ -177,15 +177,42 @@ function renderComparisonResults(data) {
         return;
     }
 
-    const cards = data.comparisons.map(item => `
-        <div class="result-card">
-            <h3>Assignment ${item.assignment_1} vs Assignment ${item.assignment_2}</h3>
-            <p><strong>Similarity:</strong> ${item.similarity_percentage}%</p>
-            <p><strong>Status:</strong> ${item.status}</p>
-        </div>
-    `).join("");
+    const heading = document.createElement("p");
+    heading.className = "similarity-method";
+    heading.textContent = `Comparison method: ${data.method || "TF-IDF cosine similarity"}`;
 
-    container.innerHTML = cards;
+    const cards = data.comparisons.map(item => {
+        const card = document.createElement("article");
+        card.className = "result-card";
+
+        const title = document.createElement("h3");
+        title.textContent =
+            `${item.assignment_1_name || `Assignment ${item.assignment_1}`} vs ` +
+            `${item.assignment_2_name || `Assignment ${item.assignment_2}`}`;
+
+        const score = Number(item.similarity_percentage);
+        const percentage = Number.isFinite(score)
+            ? Math.min(100, Math.max(0, score))
+            : 0;
+        const scoreLabel = document.createElement("p");
+        scoreLabel.innerHTML = "<strong>Cosine similarity:</strong> ";
+        scoreLabel.append(`${percentage.toFixed(2)}%`);
+
+        const progress = document.createElement("progress");
+        progress.className = "similarity-progress";
+        progress.max = 100;
+        progress.value = percentage;
+        progress.setAttribute("aria-label", `Cosine similarity ${percentage.toFixed(2)}%`);
+
+        const status = document.createElement("p");
+        status.innerHTML = "<strong>Status:</strong> ";
+        status.append(item.status || "Unknown");
+
+        card.append(title, scoreLabel, progress, status);
+        return card;
+    });
+
+    container.replaceChildren(heading, ...cards);
 }
 
 async function compareAssignments(ids) {
