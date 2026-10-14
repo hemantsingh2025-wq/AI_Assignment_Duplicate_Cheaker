@@ -1,10 +1,10 @@
-const navItems = ["Home", "About", "Features", "Contact"];
+const authAppUrl = "https://frontend-beta-eight-65.vercel.app/";
 
-const features = [
-  "AI-powered duplicate detection",
-  "Secure college login system",
-  "Teacher review workflow",
-  "Similarity analysis dashboard",
+const navItems = [
+  { label: "Home", href: "#home" },
+  { label: "About", href: "#about" },
+  { label: "Features", href: "#features" },
+  { label: "Login", href: authAppUrl },
 ];
 
 const highlights = [
@@ -13,24 +13,51 @@ const highlights = [
   { value: "2 min", label: "Fast upload checks" },
 ];
 
+const featureCards = [
+  {
+    icon: "⚡",
+    title: "AI similarity engine",
+    text: "Automatically compares assignments, highlights suspicious overlaps, and ranks risky submissions with explainable insights.",
+  },
+  {
+    icon: "🔒",
+    title: "Secure academic workflow",
+    text: "Protect student submissions with role-based access, controlled uploads, and trusted reviewer permissions.",
+  },
+  {
+    icon: "📊",
+    title: "Live review dashboard",
+    text: "Track reports, review status, and assignment trends through an intuitive analytics workspace for instructors.",
+  },
+];
+
+const processSteps = [
+  "Upload or sync student submissions",
+  "Run AI-based duplicate checks",
+  "Review flagged matches and evidence",
+  "Approve or escalate the final verdict",
+];
+
 function App() {
   return (
-    <div className="page-shell">
+    <div className="page-shell" id="home">
       <header className="topbar">
         <div className="brand-wrap">
           <div className="brand-mark">A</div>
           <span>Assignment AI</span>
         </div>
 
-        <nav className="nav">
+        <nav className="nav" aria-label="Main navigation">
           {navItems.map((item) => (
-            <a key={item} href="#" className="nav-link">
-              {item}
+            <a key={item.label} href={item.href} className="nav-link">
+              {item.label}
             </a>
           ))}
         </nav>
 
-        <button className="nav-button">Get Started</button>
+        <a className="nav-button" href={authAppUrl}>
+          Get Started
+        </a>
       </header>
 
       <main className="content-wrap">
@@ -41,13 +68,17 @@ function App() {
               Detect student assignment duplication with <span>confidence</span>
             </h1>
             <p>
-              A secure platform that helps institutions review submissions, identify copied work,
-              and support fair academic evaluation with AI-based similarity checks.
+              A secure platform that helps colleges and universities review submissions, identify copied work,
+              and support fair academic evaluation with AI-based similarity analysis.
             </p>
 
             <div className="hero-actions">
-              <button className="primary-btn">Explore Features</button>
-              <button className="secondary-btn">Learn More</button>
+              <a className="primary-btn" href="#features">
+                Explore Features
+              </a>
+              <a className="secondary-btn" href="#about">
+                Learn More
+              </a>
             </div>
 
             <div className="stats-row">
@@ -64,7 +95,7 @@ function App() {
             <div className="image-card">
               <img
                 src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=900&q=80"
-                alt="Student studying"
+                alt="Students collaborating in a classroom"
               />
             </div>
             <div className="floating-box">
@@ -83,14 +114,15 @@ function App() {
           <div className="about-grid">
             <div className="about-copy">
               <p>
-                This platform is designed for students, teachers, and academic administrators to manage
-                assignments more effectively. It streamlines uploading, evaluation, and plagiarism checks
-                in a simple and reliable workflow.
+                This platform is designed for students, teachers, and administrators to manage assignments more
+                effectively. It simplifies submission review, assignment tracking, and plagiarism detection in one
+                streamlined workflow.
               </p>
               <ul>
-                {features.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
+                <li>AI-powered duplicate detection</li>
+                <li>Secure college login system</li>
+                <li>Teacher review workflow</li>
+                <li>Similarity analysis dashboard</li>
               </ul>
             </div>
 
@@ -108,6 +140,55 @@ function App() {
                 <strong>Academic fairness</strong>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className="feature-section" id="features">
+          <div className="section-heading center-heading">
+            <span className="mini-label">Core features</span>
+            <h2>Everything your academic team needs in one place.</h2>
+          </div>
+
+          <div className="feature-grid">
+            {featureCards.map((feature) => (
+              <article key={feature.title} className="feature-card">
+                <div className="feature-icon">{feature.icon}</div>
+                <h3>{feature.title}</h3>
+                <p>{feature.text}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="process-section">
+          <div className="process-copy">
+            <span className="mini-label">How it works</span>
+            <h2>From upload to verdict in a few simple steps.</h2>
+            <p>
+              Institutions can move from submission intake to evidence-backed decisions without complicated manual
+              review processes.
+            </p>
+          </div>
+
+          <div className="process-steps">
+            {processSteps.map((step, index) => (
+              <div key={step} className="step-item">
+                <span className="step-number">0{index + 1}</span>
+                <p>{step}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="cta-section" id="contact">
+          <div className="cta-card">
+            <div>
+              <span className="mini-label">Ready to begin?</span>
+              <h2>Build a stronger, fairer academic review process.</h2>
+            </div>
+            <a className="primary-btn" href={authAppUrl}>
+              Request a Demo
+            </a>
           </div>
         </section>
       </main>
