@@ -1,0 +1,4 @@
+venv/
+uploads/
+*.db
+signup_debug_check.py
