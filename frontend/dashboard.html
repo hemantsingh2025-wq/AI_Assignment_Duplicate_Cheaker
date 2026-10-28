@@ -31,6 +31,10 @@
                 🔍 Similarity Results
             </button>
 
+            <button class="nav-item" data-section="my-submissions" onclick="showSection('my-submissions')">
+                📋 My Assignments
+            </button>
+
             <button class="nav-item" data-section="classrooms" onclick="showSection('classrooms')">
                 🏫 Classrooms
             </button>
@@ -53,6 +57,31 @@
             <div>
                 <h1 id="pageTitle">Dashboard</h1>
                 <p>AI Assignment Duplicate Checker</p>
+            </div>
+
+            <div class="notification-area" id="studentNotificationArea" hidden>
+                <button
+                    type="button"
+                    id="notificationToggle"
+                    class="notification-toggle"
+                    aria-label="Open notifications"
+                    aria-expanded="false"
+                    onclick="toggleNotificationPanel()"
+                >
+                    <span aria-hidden="true">🔔</span>
+                    <span>Notifications</span>
+                    <span id="notificationBadge" class="notification-badge" hidden>0</span>
+                </button>
+                <div id="notificationPanel" class="notification-panel" hidden>
+                    <div class="notification-panel-header">
+                        <h2>Notifications</h2>
+                        <button type="button" onclick="enableBrowserNotifications()">Enable browser alerts</button>
+                    </div>
+                    <div id="notificationList" class="notification-list" aria-live="polite">
+                        <p>Loading notifications...</p>
+                    </div>
+                </div>
+                <p id="notificationToast" class="notification-toast" role="status" hidden></p>
             </div>
 
             <div class="admin-info">
@@ -83,7 +112,7 @@
                     <div class="card-icon">⚠️</div>
                     <div>
                         <h3 id="duplicateAssignments">0</h3>
-                        <p>Duplicate Groups</p>
+                        <p id="assignmentStatusLabel">Duplicate Groups</p>
                     </div>
                 </div>
 
@@ -121,16 +150,25 @@
 
             </div>
 
+            <div class="teacher-box student-submissions-preview" id="studentSubmissionsPreview">
+                <h3>My Assignment Status</h3>
+                <div id="homeSubmissionList">
+                    <p>Loading your assignments...</p>
+                </div>
+                <button type="button" onclick="showSection('my-submissions')">
+                    View all assignments
+                </button>
+            </div>
+
         </section>
 
 
-        <!-- UPLOAD SECTION -->
 
         <section id="upload" class="section">
 
             <div class="section-header">
                 <h2>Upload Assignments</h2>
-                <p>Select 2 to 100 assignment files.</p>
+                <p id="uploadInstructions">Select 2 to 100 assignment files.</p>
             </div>
 
             <div class="upload-box">
@@ -161,7 +199,7 @@
                     <select id="classroomSelect">
                         <option value="">Select a classroom</option>
                     </select>
-                    <p id="classroomUploadHint">Students must join a classroom before uploading.</p>
+                    <p id="classroomUploadHint">Classroom selection depends on your enrollment.</p>
                 </div>
 
                 <input
@@ -181,6 +219,7 @@
                 <button
                     class="check-btn"
                     onclick="checkSimilarity()"
+                    id="uploadActionButton"
                 >
                     🔍 Check Similarity
                 </button>
@@ -189,6 +228,19 @@
 
             </div>
 
+        </section>
+
+        <section id="my-submissions" class="section">
+            <div class="section-header">
+                <h2>My Assignments</h2>
+                <p>Check whether each assignment is pending, approved, or rejected by your teacher.</p>
+            </div>
+            <div class="teacher-box">
+                <button type="button" onclick="loadMySubmissions()">Refresh status</button>
+                <div id="mySubmissionList" class="submission-list">
+                    <p>Loading your assignments...</p>
+                </div>
+            </div>
         </section>
 
 
@@ -218,16 +270,36 @@
         <section id="classrooms" class="section">
             <div class="section-header">
                 <h2>Classrooms</h2>
-                <p>Join a classroom with its code, or create one for your students.</p>
+                <p id="classroomIntro">Join your classroom to access online classes.</p>
             </div>
 
             <div class="teacher-box classroom-management">
                 <div id="classroomActions"></div>
                 <p id="classroomMessage" role="status"></p>
                 <h3>Your Classrooms</h3>
+                <p id="classroomLiveHint">Online class availability refreshes automatically.</p>
                 <div id="classroomList">
                     <p>Loading classrooms...</p>
                 </div>
+                <section id="onlineClassPanel" class="online-class-panel" hidden>
+                    <div class="online-class-header">
+                        <div>
+                            <h3 id="onlineClassTitle">Online class</h3>
+                            <p id="onlineClassStatus" role="status">Connecting...</p>
+                        </div>
+                        <div class="online-class-controls">
+                            <button type="button" id="toggleMicrophone" onclick="toggleOnlineMicrophone()">Mute microphone</button>
+                            <button type="button" id="toggleCamera" onclick="toggleOnlineCamera()">Turn camera off</button>
+                            <button type="button" class="end-class-button" id="leaveOnlineClassButton" onclick="leaveOnlineClass()">Leave class</button>
+                        </div>
+                    </div>
+                    <div id="onlineVideoGrid" class="online-video-grid">
+                        <article class="online-video-tile">
+                            <video id="localClassVideo" autoplay playsinline muted></video>
+                            <p>You</p>
+                        </article>
+                    </div>
+                </section>
             </div>
         </section>
 
@@ -237,13 +309,19 @@
         <section id="teachers" class="section">
 
             <div class="section-header">
-                <h2>Teacher Management</h2>
-                <p>Manage teachers using the admin panel.</p>
+                <h2>Classroom Assignments</h2>
+                <p>Student submissions are organized and stored by classroom and section.</p>
             </div>
 
             <div class="teacher-box">
 
-                <h3>Teacher Subject Review</h3>
+                <div class="assignment-review-toolbar">
+                    <label for="assignmentClassFilter">Classroom / section</label>
+                    <select id="assignmentClassFilter" onchange="filterTeacherAssignments()">
+                        <option value="all">All classrooms</option>
+                    </select>
+                    <button type="button" onclick="loadTeacherReviewList()">Refresh assignments</button>
+                </div>
 
                 <div id="teacherReviewList">
                     <p>No assignments for review yet.</p>

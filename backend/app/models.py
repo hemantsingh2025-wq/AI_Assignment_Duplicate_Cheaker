@@ -1,9 +1,18 @@
-from sqlalchemy import Column, Integer, String, Boolean, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, Float, ForeignKey, Index, text
 from .database import Base
 
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        Index(
+            "uq_users_single_authority",
+            "role",
+            unique=True,
+            sqlite_where=text("role = 'authority'"),
+            postgresql_where=text("role = 'authority'"),
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
 
@@ -176,3 +185,17 @@ class SimilarityResult(Base):
         Float,
         nullable=False
     )
+
+
+class AssignmentNotification(Base):
+    __tablename__ = "assignment_notifications"
+    __table_args__ = (
+        Index("ix_assignment_notifications_user_read", "user_id", "is_read"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    assignment_id = Column(Integer, ForeignKey("assignments.id"), nullable=False)
+    message = Column(String, nullable=False)
+    is_read = Column(Boolean, nullable=False, default=False)
+    created_at = Column(String, nullable=False)
